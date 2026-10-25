@@ -125,7 +125,6 @@ server.js            Express backend
 public/index.html    control UI (vanilla JS + CSS)
 streamer             CLI wrapper
 start.sh / stop.sh   lifecycle scripts used by the CLI
-stream_server.py     minimal standalone single-file HTTP streamer (serves one file)
 package.json
 logs/                runtime logs (gitignored)
 aliases.json         numeric-id → path map (generated at runtime, gitignored)
