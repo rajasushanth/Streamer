@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Streamer</title>
+<style>
+  :root {
+    --bg: #0b0d12; --bg2: #0f131b;
+    --panel: #141924cc; --panel-solid: #141924; --card: #1a2030;
+    --line: #262d3d; --line2: #313a4e;
+    --txt: #eef1f7; --dim: #93a0b5; --faint: #5f6b80;
+    --accent: #6c8cff; --accent2: #22d3ee;
+    --grad: linear-gradient(135deg, #6c8cff 0%, #22d3ee 100%);
+    --good: #34d399; --good-grad: linear-gradient(135deg,#22c55e,#10b981);
+    --bad: #fb7185; --bad-grad: linear-gradient(135deg,#f43f5e,#e11d48);
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; color: var(--txt); background: var(--bg);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* soft animated aurora background */
+  body::before {
+    content: ""; position: fixed; inset: -20%; z-index: -1; filter: blur(80px); opacity: .5;
+    background:
+      radial-gradient(40% 40% at 20% 15%, #6c8cff55, transparent 70%),
+      radial-gradient(35% 35% at 85% 20%, #22d3ee44, transparent 70%),
+      radial-gradient(40% 45% at 70% 90%, #a855f733, transparent 70%);
+    animation: drift 18s ease-in-out infinite alternate;
+  }
+  @keyframes drift { from { transform: translate3d(0,0,0) scale(1);} to { transform: translate3d(0,-4%,0) scale(1.08);} }
+
+  header {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 16px 22px; border-bottom: 1px solid var(--line);
+    background: rgba(11,13,18,.72); backdrop-filter: blur(14px);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .logo { font-size: 20px; font-weight: 750; letter-spacing: -.02em; display: flex; align-items: center; gap: 10px; }
+  .logo .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--grad); box-shadow: 0 0 14px #6c8cffaa; }
+  .brandgrad { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .srv { color: var(--dim); font-size: 13px; margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .srv code { color: var(--accent2); background: #0c1017; padding: 3px 8px; border-radius: 7px; border: 1px solid var(--line); }
+  .awake { color: var(--good); font-size: 12px; display: inline-flex; align-items: center; gap: 5px; }
+  .awake::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--good); box-shadow: 0 0 8px var(--good); }
+
+  main { display: grid; grid-template-columns: 1fr minmax(360px, 420px); min-height: calc(100vh - 62px); }
+  @media (max-width: 880px) { main { grid-template-columns: 1fr; } }
+
+  /* ---- browser ---- */
+  .browser { padding: 18px 22px; min-width: 0; }
+  .bar { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .icbtn, button, .btn {
+    background: var(--card); color: var(--txt); border: 1px solid var(--line2);
+    border-radius: 10px; padding: 8px 13px; cursor: pointer; font-size: 14px; font-weight: 500;
+    transition: transform .08s ease, background .15s, border-color .15s, box-shadow .15s;
+  }
+  button:hover, .btn:hover, .icbtn:hover { background: #222a3c; border-color: #3a455d; }
+  button:active { transform: translateY(1px); }
+  button:disabled { opacity: .4; cursor: default; }
+  .search { position: relative; flex: 1; min-width: 180px; }
+  .search input {
+    width: 100%; background: var(--card); color: var(--txt);
+    border: 1px solid var(--line2); border-radius: 10px; padding: 9px 12px 9px 34px; font-size: 14px;
+  }
+  .search input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px #6c8cff33; }
+  .search .mag { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--faint); }
+
+  .crumbs { font-size: 12.5px; color: var(--dim); word-break: break-all; margin: 0 2px 12px; }
+  .crumbs b { color: var(--txt); }
+
+  ul.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+  ul.list li {
+    display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+    border-radius: 11px; cursor: pointer; border: 1px solid transparent; position: relative;
+    transition: background .12s, border-color .12s, transform .06s;
+  }
+  ul.list li:hover { background: #161c28; }
+  ul.list li:active { transform: scale(.995); }
+  ul.list li.sel { background: #18213a; border-color: #3b5bd9; box-shadow: 0 0 0 1px #3b5bd955 inset; }
+  .ico { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; flex: none; font-size: 15px; }
+  .ico.dir { background: #232c40; }
+  .ico.vid { background: linear-gradient(135deg,#2a3350,#1d2740); }
+  .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meta { display: flex; gap: 8px; align-items: center; flex: none; }
+  .size { color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .chip { font-size: 11px; padding: 2px 7px; border-radius: 999px; border: 1px solid; }
+  .chip.sub { color: var(--accent2); border-color: #22d3ee55; background: #22d3ee11; }
+  .chip.on { color: var(--good); border-color: #34d39955; background: #34d39911; display: inline-flex; align-items: center; gap: 5px; }
+  .chip.on::before { content:""; width:6px;height:6px;border-radius:50%;background:var(--good); animation: pulse 1.4s infinite; }
+
+  .empty, .loading { color: var(--dim); padding: 40px 12px; text-align: center; }
+  .spinner { width: 22px; height: 22px; border: 2.5px solid var(--line2); border-top-color: var(--accent); border-radius: 50%; display: inline-block; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { 0%,100%{ opacity:1; } 50%{ opacity:.25; } }
+
+  /* ---- side panel ---- */
+  .side {
+    border-left: 1px solid var(--line); background: var(--panel); backdrop-filter: blur(16px);
+    padding: 22px; position: sticky; top: 62px; align-self: start;
+    height: calc(100vh - 62px); overflow-y: auto;
+  }
+  @media (max-width: 880px) { .side { position: static; height: auto; border-left: none; border-top: 1px solid var(--line); } }
+  .ph { color: var(--dim); text-align: center; margin-top: 64px; }
+  .ph .big { font-size: 42px; opacity: .5; margin-bottom: 10px; }
+
+  .d-title { font-size: 16px; font-weight: 650; line-height: 1.35; margin: 0 0 4px; }
+  .d-path { color: var(--faint); font-size: 12px; word-break: break-all; margin-bottom: 18px; }
+
+  .action { margin-bottom: 18px; }
+  .big-btn {
+    width: 100%; border: none; border-radius: 12px; padding: 14px; font-size: 15.5px; font-weight: 700;
+    color: #06240f; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;
+    box-shadow: 0 8px 22px -8px #10b98188; transition: transform .1s, box-shadow .2s, filter .15s;
+  }
+  .big-btn.start { background: var(--good-grad); }
+  .big-btn.stop { background: var(--bad-grad); color: #2a0510; box-shadow: 0 8px 22px -8px #f43f5e88; }
+  .big-btn:hover { filter: brightness(1.06); transform: translateY(-1px); }
+  .big-btn:active { transform: translateY(0); }
+  .big-btn:disabled { filter: grayscale(.4); opacity: .7; }
+
+  .status {
+    border: 1px solid var(--line2); border-radius: 12px; padding: 14px; margin-bottom: 18px;
+    background: #0e1420; overflow: hidden;
+  }
+  .status.on { border-color: #34d39955; box-shadow: 0 0 0 1px #34d39922, 0 0 26px -10px #34d39977; }
+  .status-head { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 13.5px; margin-bottom: 12px; }
+  .live-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--faint); flex: none; }
+  .status.on .live-dot { background: var(--good); box-shadow: 0 0 10px var(--good); animation: pulse 1.3s infinite; }
+  .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
+  .stat { background: #0b101a; border: 1px solid var(--line); border-radius: 10px; padding: 9px; text-align: center; }
+  .stat .v { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat .k { font-size: 10.5px; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; margin-top: 2px; }
+
+  .chip.opt { color: #fbbf24; border-color: #fbbf2455; background: #fbbf2411; }
+  .optcard { border: 1px solid var(--line2); border-radius: 12px; padding: 14px; margin-bottom: 18px; background: #0e1420; display: flex; flex-direction: column; gap: 4px; }
+  .optcard.done { flex-direction: row; align-items: center; gap: 12px; border-color: #34d39955; background: #0e1a16; }
+  .obadge { width: 28px; height: 28px; border-radius: 50%; background: var(--good-grad); color: #06240f; display: grid; place-items: center; font-weight: 800; flex: none; }
+  .optcard b { font-size: 14px; }
+  .sub2 { font-size: 12px; color: var(--dim); line-height: 1.55; }
+  .sub2 code { color: var(--accent2); background: var(--bg); padding: 1px 5px; border-radius: 5px; }
+  .opt-btn { width: 100%; border: none; border-radius: 10px; padding: 11px; font-size: 14.5px; font-weight: 700; cursor: pointer; color: #2a1c02; background: linear-gradient(135deg,#fbbf24,#f59e0b); margin-bottom: 8px; transition: filter .15s, transform .1s; }
+  .opt-btn:hover { filter: brightness(1.06); transform: translateY(-1px); }
+  .pbar { height: 8px; background: #0b101a; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+  .pbarfill { height: 100%; background: linear-gradient(90deg,#fbbf24,#22d3ee); transition: width .4s ease; }
+  .switchcard { border: 1px dashed var(--line2); border-radius: 12px; padding: 12px; margin-bottom: 16px; background: #0e1420; }
+  .switch-btn { width: 100%; margin-top: 8px; border: none; border-radius: 10px; padding: 10px; font-size: 14px; font-weight: 700; cursor: pointer; color: #06240f; background: var(--good-grad); transition: filter .15s, transform .1s; }
+  .switch-btn:hover { filter: brightness(1.06); transform: translateY(-1px); }
+
+  .lbl { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; margin: 18px 0 8px; font-weight: 600; }
+  .urlbox { display: flex; gap: 7px; }
+  .urlbox code {
+    flex: 1; background: #0b101a; border: 1px solid var(--line2); border-radius: 10px;
+    padding: 10px 12px; font-size: 13px; word-break: break-all; color: var(--accent2); font-family: ui-monospace, Menlo, monospace;
+  }
+  .copybtn { flex: none; }
+  .qr-wrap { display: flex; justify-content: center; margin: 14px 0 6px; }
+  .qr {
+    background: #fff; border-radius: 14px; padding: 12px; box-shadow: 0 10px 30px -12px #000a;
+    transition: transform .2s; width: 208px; height: 208px;
+  }
+  .qr img { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+  .hint { font-size: 12.5px; color: var(--dim); line-height: 1.6; margin-top: 10px; }
+  .hint b { color: var(--txt); }
+  .subrow { display: flex; gap: 8px; align-items: center; margin-bottom: 7px; }
+  .subrow .name { font-size: 13px; }
+  .openrow { display: flex; gap: 8px; margin-top: 8px; }
+  .openrow a { text-decoration: none; text-align: center; flex: 1; }
+  .btn-accent { background: var(--grad); color: #06121f; border: none; font-weight: 700; }
+  .disabled-note { font-size: 12px; color: var(--faint); margin-top: 8px; }
+
+  .toast {
+    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(10px);
+    background: #0f1724; color: var(--txt); border: 1px solid var(--line2);
+    padding: 10px 18px; border-radius: 11px; font-size: 13.5px; font-weight: 600;
+    opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; box-shadow: 0 10px 30px -10px #000;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.good { border-color: #34d39966; } .toast.bad { border-color: #fb718566; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><span class="dot"></span><span>Mac&nbsp;<span class="brandgrad">→</span>&nbsp;TV Streamer</span></div>
+  <div class="srv" id="srv"><span class="spinner" style="width:14px;height:14px"></span> starting…</div>
+</header>
+<main>
+  <section class="browser">
+    <div class="bar">
+      <button id="up">↑ Up</button>
+      <button id="home">🏠 Home</button>
+      <div class="search"><span class="mag">🔎</span><input type="text" id="filter" placeholder="Filter this folder…" /></div>
+    </div>
+    <div class="crumbs" id="crumbs"></div>
+    <ul class="list" id="list"><div class="loading"><span class="spinner"></span></div></ul>
+  </section>
+  <aside class="side">
+    <div class="ph" id="placeholder">
+      <div class="big">🎬</div>
+      Browse your folders and pick a video to stream to the TV.
+    </div>
+    <div id="detail" style="display:none"></div>
+  </aside>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+let INFO = { ip: "127.0.0.1", port: 8000, home: "/" };
+let curDir = null, curData = null, selected = null;
+let statusMap = {};          // token -> status object
+let pollTimer = null;
+let optStatus = {};          // token -> optimize status object
+let optTimer = null;
+let streamingFile = null;    // the file object currently streaming (pinned in the panel)
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function fmtSize(b) {
+  if (!b) return "0 B";
+  const u = ["B","KB","MB","GB","TB"]; let i = 0, n = b;
+  while (n >= 1024 && i < u.length-1) { n /= 1024; i++; }
+  return n.toFixed(n >= 10 || i === 0 ? 0 : 1) + " " + u[i];
+}
+function fmtDur(ms) {
+  if (ms == null) return "—";
+  const s = Math.floor(ms/1000), h = Math.floor(s/3600), m = Math.floor(s%3600/60), ss = s%60;
+  return (h?`${h}:${String(m).padStart(2,"0")}`:`${m}`) + ":" + String(ss).padStart(2,"0");
+}
+function toast(msg, kind) {
+  const t = $("toast"); t.textContent = msg; t.className = "toast show " + (kind||"");
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("show"), 1600);
+}
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); toast("Copied to clipboard", "good"); }
+  catch { toast("Copy failed — select manually", "bad"); }
+}
+const streamURL = (f) => `http://${INFO.ip}:${INFO.port}/${f.token}${(f.streamExt||f.ext)?"."+(f.streamExt||f.ext):""}`;
+const subURL = (s) => `http://${INFO.ip}:${INFO.port}/${s.token}${s.ext?"."+s.ext:""}`;
+
+// ---- browsing ----
+async function browse(dir) {
+  const url = "/api/browse" + (dir ? "?path=" + encodeURIComponent(dir) : "");
+  $("list").innerHTML = '<div class="loading"><span class="spinner"></span></div>';
+  let data;
+  try { data = await (await fetch(url)).json(); }
+  catch { $("list").innerHTML = '<div class="empty">Could not read folder.</div>'; return; }
+  if (data.error) { toast(data.error, "bad"); $("list").innerHTML = '<div class="empty">'+esc(data.error)+'</div>'; return; }
+  curDir = data.path; curData = data;
+  $("crumbs").innerHTML = crumbHtml(data.path);
+  $("up").disabled = !data.parent; $("up")._parent = data.parent;
+  render();
+}
+function crumbHtml(p) {
+  const parts = p.split("/").filter(Boolean);
+  let acc = "", out = '<b>/</b>';
+  parts.forEach((seg, i) => { acc += "/" + seg; out += (i? ' <span style="color:var(--faint)">/</span> ':'') + `<b>${esc(seg)}</b>`; });
+  return out;
+}
+function render() {
+  if (!curData) return;
+  const q = $("filter").value.toLowerCase();
+  const list = $("list"); list.innerHTML = "";
+  const dirs = curData.dirs.filter(d => d.name.toLowerCase().includes(q));
+  const files = curData.files.filter(f => f.name.toLowerCase().includes(q));
+  if (!dirs.length && !files.length) {
+    list.innerHTML = '<div class="empty">No folders or videos here' + (q?" match the filter":"") + '.</div>'; return;
+  }
+  for (const d of dirs) {
+    const li = document.createElement("li");
+    li.innerHTML = `<span class="ico dir">📁</span><span class="name">${esc(d.name)}</span>`;
+    li.onclick = () => browse(d.path);
+    list.appendChild(li);
+  }
+  for (const f of files) {
+    const li = document.createElement("li");
+    const on = !!statusMap[f.token];
+    const chips = `<span class="meta">`
+      + (on ? `<span class="chip on">live</span>` : "")
+      + (f.optimized ? `<span class="chip opt">⚡</span>` : "")
+      + (f.subs && f.subs.length ? `<span class="chip sub">${f.subs.length} sub</span>` : "")
+      + `<span class="size">${fmtSize(f.size)}</span></span>`;
+    li.innerHTML = `<span class="ico vid">🎞️</span><span class="name">${esc(f.name)}</span>${chips}`;
+    li.onclick = () => select(f, li);
+    if (selected && selected.token === f.token) li.classList.add("sel");
+    list.appendChild(li);
+  }
+}
+function select(f, li) {
+  selected = f;
+  [...$("list").children].forEach(c => c.classList && c.classList.remove("sel"));
+  if (li) li.classList.add("sel");
+  renderSide();
+  refreshOpt(f.token); // fetch live optimize status for this file
+}
+function fileByToken(token) {
+  if (selected && selected.token === token) return selected;
+  if (streamingFile && streamingFile.token === token) return streamingFile;
+  if (curData) { const hit = curData.files.find(x => x.token === token); if (hit) return hit; }
+  return selected;
+}
+
+// ---- side panel orchestration ----
+// Once a stream is active it stays PINNED in the panel, even while you browse
+// or select other files on the left. Selecting a different file shows a small
+// "stream this instead" strip above the pinned stream.
+function renderSide() {
+  if (streamingFile && !statusMap[streamingFile.token]) streamingFile = null; // ended elsewhere
+  const show = streamingFile || selected;
+  if (!show) { $("detail").style.display = "none"; $("placeholder").style.display = ""; return; }
+  renderDetailFor(show);
+  if (streamingFile && selected && selected.token !== streamingFile.token) {
+    const strip = document.createElement("div");
+    strip.className = "switchcard";
+    strip.innerHTML = `<div class="sub2">A stream is running. You're browsing <b>${esc(selected.name)}</b>.</div>`
+      + `<button class="switch-btn" onclick="switchTo('${selected.token}')">▶ Stream this instead</button>`;
+    const d = $("detail");
+    d.insertBefore(strip, d.firstChild);
+  }
+}
+async function switchTo(token) {
+  if (streamingFile && streamingFile.token !== token) await stopStream(streamingFile.token, true);
+  await startStream(token);
+}
+
+// ---- detail (for an explicit file) + start/stop ----
+function renderDetailFor(f) {
+  if (!f) return;
+  $("placeholder").style.display = "none";
+  const d = $("detail"); d.style.display = "block";
+  const url = streamURL(f);
+  const st = statusMap[f.token];
+  const on = !!st;
+
+  let subs = "";
+  if (f.subs && f.subs.length) {
+    subs = '<div class="lbl">Subtitles</div>';
+    for (const s of f.subs) subs += `<div class="subrow"><span class="ico" style="width:22px">💬</span>`
+      + `<span class="name" title="${esc(s.path)}">${esc(s.name)}</span>`
+      + `<button onclick='copy(${JSON.stringify(subURL(s))})'>Copy URL</button></div>`;
+  }
+
+  const statusCard = on ? `
+    <div class="status on">
+      <div class="status-head"><span class="live-dot"></span>${st.live ? "Streaming to a device" : "Ready — waiting for the TV to connect"}</div>
+      <div class="stats">
+        <div class="stat"><div class="v" id="s-up">${fmtDur(st.uptimeMs)}</div><div class="k">Uptime</div></div>
+        <div class="stat"><div class="v" id="s-data">${fmtSize(st.bytesSent)}</div><div class="k">Sent</div></div>
+        <div class="stat"><div class="v" id="s-conn">${st.connections}</div><div class="k">Devices</div></div>
+      </div>
+    </div>` : "";
+
+  const o = optStatus[f.token] || { optimized: f.optimized, state: f.optimized ? "done" : "none", percent: f.optimized ? 100 : 0, available: INFO.ffmpeg };
+  let optBlock;
+  if (o.optimized || o.state === "done") {
+    optBlock = `<div class="optcard done"><span class="obadge">✓</span><div><b>Seek-optimized</b><div class="sub2">Lossless MP4 · reliable seek &amp; resume · same quality</div></div></div>`;
+  } else if (o.state === "running") {
+    optBlock = `<div class="optcard"><div class="sub2" style="margin-bottom:8px">⚙️ Optimizing (lossless remux)… <b>${o.percent||0}%</b></div><div class="pbar"><div class="pbarfill" style="width:${o.percent||0}%"></div></div></div>`;
+  } else if (INFO.ffmpeg === false || o.available === false) {
+    optBlock = `<div class="optcard"><div class="sub2">For reliable seek &amp; resume, install ffmpeg then reload: <code>brew install ffmpeg</code></div></div>`;
+  } else {
+    optBlock = `<div class="optcard">
+      <button class="opt-btn" onclick="optimize('${f.token}')">⚡ Make seek-friendly (lossless)</button>
+      <div class="sub2">Fixes slow seek &amp; resume-buffering in VLC by remuxing to MP4. <b>No quality loss</b> — exact same video &amp; audio.${o.error?`<br><span style="color:var(--bad)">${esc(o.error)}</span>`:""}</div>
+    </div>`;
+  }
+
+  d.innerHTML = `
+    <div class="d-title">${esc(f.name)}</div>
+    <div class="d-path">${esc(f.path)} · ${fmtSize(f.size)}</div>
+    <div class="action">
+      ${on
+        ? `<button class="big-btn stop" onclick="stopStream('${f.token}')">⏹ Stop streaming</button>`
+        : `<button class="big-btn start" onclick="startStream('${f.token}')">▶ Start streaming</button>`}
+    </div>
+    ${optBlock}
+    ${statusCard}
+    <div class="lbl">Stream URL ${on?"":"(active after Start)"}</div>
+    <div class="urlbox"><code>${esc(url)}</code><button class="copybtn" onclick='copy(${JSON.stringify(url)})'>Copy</button></div>
+    <div class="qr-wrap"><div class="qr"><img alt="QR" src="/api/qr?text=${encodeURIComponent(url)}"/></div></div>
+    <div class="hint">${on
+        ? `Scan the QR on your phone, or on the TV open <b>VLC → New stream</b>, enter the URL, then <b>Play</b>. Seeking works.`
+        : `Press <b>Start streaming</b> first — the TV can only pull the file while the stream is on.`}</div>
+    ${subs}
+    <div class="lbl">Open</div>
+    <div class="openrow">
+      <a class="btn btn-accent" href="vlc://${url.replace(/^https?:\/\//,'')}">Open in VLC</a>
+      <a class="btn" href="${esc(url)}" target="_blank">Open URL</a>
+    </div>
+    ${on?"":'<div class="disabled-note">These open links return “not started” until you press Start.</div>'}
+  `;
+}
+
+async function startStream(token) {
+  try {
+    const r = await fetch("/api/stream/start", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({token}) });
+    const data = await r.json();
+    if (data.error) return toast(data.error, "bad");
+    streamingFile = fileByToken(token); // pin this file in the panel
+    applyStatus(data);
+    toast("Streaming started", "good");
+    ensurePolling();
+    renderSide();
+  } catch { toast("Could not start", "bad"); }
+}
+async function stopStream(token, silent) {
+  try {
+    const r = await fetch("/api/stream/stop", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({token}) });
+    const data = await r.json();
+    if (streamingFile && (!token || streamingFile.token === token)) streamingFile = null; // unpin
+    applyStatus(data);
+    if (!silent) toast("Streaming stopped — cleaned up", "good");
+    refreshOpt(token); // generated file was removed; refresh the badge
+    renderSide();
+  } catch { if (!silent) toast("Could not stop", "bad"); }
+}
+
+// ---- optimize (lossless remux) ----
+async function refreshOpt(token) {
+  try {
+    const o = await (await fetch("/api/optimize/status?token=" + encodeURIComponent(token))).json();
+    optStatus[token] = o;
+    if (o.state === "running") ensureOptPolling();
+    let changed = false;
+    for (const f of [selected, streamingFile]) {
+      if (f && f.token === token) {
+        if (o.optimized && !f.optimized) { f.optimized = true; f.streamExt = "mp4"; changed = true; }
+        else if (!o.optimized && f.optimized) { f.optimized = false; f.streamExt = f.ext; changed = true; }
+      }
+    }
+    // While optimizing the shown file, update the progress bar in place (no QR reload).
+    const shown = streamingFile || selected;
+    if (!changed && shown && shown.token === token && o.state === "running") {
+      const fill = $("detail").querySelector(".pbarfill");
+      if (fill) {
+        fill.style.width = (o.percent || 0) + "%";
+        const lbl = $("detail").querySelector(".optcard .sub2 b");
+        if (lbl) lbl.textContent = (o.percent || 0) + "%";
+        return;
+      }
+    }
+    if (changed && curData) render();
+    renderSide();
+  } catch {}
+}
+async function optimize(token) {
+  try {
+    const r = await fetch("/api/optimize", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({token}) });
+    const o = await r.json();
+    if (o.error) return toast(o.error, "bad");
+    optStatus[token] = o;
+    toast("Optimizing (lossless)…", "good");
+    ensureOptPolling();
+    renderSide();
+  } catch { toast("Could not start optimize", "bad"); }
+}
+function ensureOptPolling() {
+  if (optTimer) return;
+  optTimer = setInterval(async () => {
+    const running = Object.keys(optStatus).filter(t => optStatus[t] && optStatus[t].state === "running");
+    if (!running.length) { clearInterval(optTimer); optTimer = null; return; }
+    for (const t of running) {
+      await refreshOpt(t);
+      const s = optStatus[t];
+      if (s && s.state !== "running") {
+        if (s.state === "done") toast("Optimized ✓ — seek & resume ready", "good");
+        else if (s.state === "error") toast("Optimize failed: " + (s.error || ""), "bad");
+      }
+    }
+  }, 1200);
+}
+
+// ---- live status polling ----
+function fileObjFromStatus(s) {
+  return { name: s.name, path: s.path, size: s.size, token: s.token, ext: s.ext, streamExt: s.streamExt, optimized: s.optimized, subs: s.subs || [] };
+}
+function applyStatus(data) {
+  statusMap = {};
+  for (const s of (data.active || [])) statusMap[s.token] = s;
+  // Adopt an active stream we aren't tracking yet (page reload, or started elsewhere),
+  // so the streaming panel stays pinned/visible.
+  if (!streamingFile) {
+    const act = (data.active || [])[0];
+    if (act) streamingFile = fileObjFromStatus(act);
+  }
+  // light update of the browser chips without full reload
+  if (curData) render();
+  updateLiveStats();
+}
+function updateLiveStats() {
+  if (streamingFile && !statusMap[streamingFile.token]) { streamingFile = null; renderSide(); return; }
+  // Which file's status is the panel currently showing?
+  const tok = streamingFile ? streamingFile.token
+            : (selected && statusMap[selected.token] ? selected.token : null);
+  const st = tok ? statusMap[tok] : null;
+  const detailOnState = !!$("detail").querySelector(".status");
+  // if active-state changed, re-render the whole panel; else just the numbers
+  if (!!st !== detailOnState) { renderSide(); return; }
+  if (st) {
+    const up = $("s-up"), dt = $("s-data"), cn = $("s-conn");
+    if (up) up.textContent = fmtDur(st.uptimeMs);
+    if (dt) dt.textContent = fmtSize(st.bytesSent);
+    if (cn) cn.textContent = st.connections;
+    const card = $("detail").querySelector(".status-head");
+    if (card) card.lastChild.textContent = st.live ? "Streaming to a device" : "Ready — waiting for the TV to connect";
+  }
+}
+async function pollStatus() {
+  try { applyStatus(await (await fetch("/api/stream/status")).json()); } catch {}
+}
+function ensurePolling() {
+  if (pollTimer) return;
+  pollTimer = setInterval(pollStatus, 1500);
+}
+
+// ---- wire up ----
+$("up").onclick = () => $("up")._parent && browse($("up")._parent);
+$("home").onclick = () => browse(INFO.home);
+$("filter").oninput = render;
+
+(async () => {
+  INFO = await (await fetch("/api/info")).json();
+  $("srv").innerHTML = `<span>serving <code>${INFO.ip}:${INFO.port}</code></span><span class="awake">Mac awake</span>`;
+  await pollStatus();
+  ensurePolling();
+  browse(INFO.home);
+})();
+</script>
+</body>
+</html>

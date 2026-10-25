@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+#
+# streamer — single command to control the Mac → TV Streamer.
+# Accepts bare words or --flags interchangeably:
+#   streamer --start | start      start (or restart) the server + open the control page
+#   streamer --stop  | stop       stop the server (and clean up generated files)
+#   streamer --restart            same as start (start.sh restarts if already running)
+#   streamer --status             show whether it's running, the URLs, and active streams
+#   streamer --logs               follow the app log (Ctrl+C to quit)
+#   streamer --open               open the control page in the browser
+#
+set -euo pipefail
+
+# Resolve this script's REAL location (following the symlink) to find the project.
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  D="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$D/$SOURCE"
+done
+DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+
+PORT="${PORT:-8090}"
+URL="http://localhost:${PORT}/"
+APPLOG="$DIR/logs/streamer.log"
+
+is_running() { pgrep -f "node .*${DIR}/server.js" >/dev/null 2>&1; }
+
+case "${1:-}" in
+  start|--start|up|restart|--restart)
+    exec "$DIR/start.sh"
+    ;;
+  stop|--stop|down)
+    exec "$DIR/stop.sh"
+    ;;
+  status|--status|st)
+    if is_running; then
+      PID="$(pgrep -f "node .*${DIR}/server.js" | tr '\n' ' ')"
+      echo "● running (PID: ${PID%% })"
+      if curl -sf "${URL}api/info" >/dev/null 2>&1; then
+        echo "  control page: ${URL}"
+        curl -s "${URL}api/info" | python3 -c 'import sys,json;d=json.load(sys.stdin);print("  on your LAN:   http://%s:%s/"%(d["ip"],d["port"]))' 2>/dev/null || true
+        curl -s "${URL}api/stream/status" | python3 -c 'import sys,json;a=json.load(sys.stdin).get("active",[]);print("  active streams: "+(", ".join(s["token"] for s in a) if a else "none"))' 2>/dev/null || true
+      else
+        echo "  (process up but not yet responding on ${URL})"
+      fi
+    else
+      echo "○ not running"
+    fi
+    ;;
+  logs|--logs|log)
+    [ -f "$APPLOG" ] || { echo "no log yet at $APPLOG"; exit 0; }
+    exec tail -n 40 -f "$APPLOG"
+    ;;
+  open|--open)
+    open "$URL"
+    ;;
+  ""|-h|--help|help)
+    cat <<EOF
+streamer — Mac → TV Streamer control  (bare word or --flag both work)
+
+  streamer --start    start (or restart) the server + open the control page
+  streamer --stop     stop the server (cleans up generated files)
+  streamer --restart  same as start
+  streamer --status   show running state, URLs, and active streams
+  streamer --logs     follow the app log (Ctrl+C to quit)
+  streamer --open     open the control page in the browser
+
+Project: $DIR
+EOF
+    ;;
+  *)
+    echo "streamer: unknown command '$1' — try: --start | --stop | --restart | --status | --logs | --open" >&2
+    exit 1
+    ;;
+esac

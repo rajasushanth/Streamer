@@ -1,0 +1,16 @@
+# dependencies (reinstall from package-lock.json)
+node_modules/
+
+# runtime state / generated
+aliases.json
+*.streamready.mp4
+*.streamready.partial.mp4
+streamer.pid
+
+# logs
+logs/
+streamer.log
+console.log
+
+# macOS
+.DS_Store
