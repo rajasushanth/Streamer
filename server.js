@@ -230,6 +230,23 @@ function probeVideoCodec(file) {
     return String(out).trim().toLowerCase();
   } catch { return ""; }
 }
+// Count embedded subtitle streams, so external subs get the right output index.
+function probeSubCount(file) {
+  try {
+    const out = require("child_process").execFileSync(FFPROBE, ["-v", "error", "-select_streams", "s", "-show_entries", "stream=index", "-of", "csv=p=0", file], { encoding: "utf8" });
+    return String(out).split("\n").filter((l) => l.trim()).length;
+  } catch { return 0; }
+}
+// Best-effort ISO-639-2 language from a subtitle filename (e.g. "SDH.eng" -> eng,
+// "English" -> eng). Used only to label the embedded track in the player.
+const SUB_ISO3 = new Set(["eng", "spa", "fre", "fra", "por", "ita", "hin", "nob", "nor", "swe", "dan", "fin", "ger", "deu", "dut", "nld", "rus", "jpn", "kor", "chi", "zho", "ara", "tur", "pol", "ces", "cze", "ron", "rum", "hun", "heb", "tha", "vie", "ind", "ell", "gre", "ukr"]);
+const SUB_NAME2ISO = { english: "eng", spanish: "spa", french: "fre", portuguese: "por", italian: "ita", hindi: "hin", norwegian: "nor", swedish: "swe", danish: "dan", finnish: "fin", german: "ger", dutch: "dut", russian: "rus", japanese: "jpn", korean: "kor", chinese: "chi", arabic: "ara", turkish: "tur", polish: "pol", czech: "ces", romanian: "ron", hungarian: "hun", hebrew: "heb", thai: "tha", vietnamese: "vie", greek: "ell" };
+function subLangOf(label) {
+  const toks = label.toLowerCase().split(/[^a-z]+/).filter(Boolean);
+  for (const t of toks) if (SUB_ISO3.has(t)) return t;
+  for (const t of toks) if (SUB_NAME2ISO[t]) return SUB_NAME2ISO[t];
+  return null;
+}
 
 // Delete any generated files for a source path (used on Stop and shutdown).
 function removeGeneratedFor(src) {
@@ -248,14 +265,29 @@ function cleanupToken(token) {
 }
 
 // Build format-adaptive ffmpeg args for a lossless MP4 remux (stream copy).
-function remuxArgs(src, partial, vcodec, withSubs) {
+// extSubs: external subtitle files to embed as selectable tracks (so players
+// streaming over HTTP, e.g. TV VLC, can switch subtitles). embCount: number of
+// subtitle streams already inside src (external tracks go after those).
+function remuxArgs(src, partial, vcodec, withSubs, extSubs, embCount) {
   // Tag HEVC/AV1 so players recognize them inside MP4; H.264 etc. need no tag.
   const vtag = vcodec === "hevc" ? ["-tag:v", "hvc1"] : vcodec === "av1" ? ["-tag:v", "av01"] : [];
-  const maps = withSubs ? ["-map", "0:v:0", "-map", "0:a?", "-map", "0:s?"] : ["-map", "0:v:0", "-map", "0:a?"];
+  const inputs = ["-i", src];
+  const maps = ["-map", "0:v:0", "-map", "0:a?"];
+  const meta = [];
+  if (withSubs) {
+    maps.push("-map", "0:s?");                 // embedded subs, if any
+    extSubs.forEach((s, i) => {
+      inputs.push("-i", s.path);               // each external .srt is input i+1
+      maps.push("-map", `${i + 1}:0`);
+      const idx = embCount + i;                // its index among output subtitle streams
+      meta.push(`-metadata:s:s:${idx}`, `title=${s.label}`);
+      if (s.lang) meta.push(`-metadata:s:s:${idx}`, `language=${s.lang}`);
+    });
+  }
   const subs = withSubs ? ["-c:s", "mov_text"] : ["-sn"]; // image subs (PGS) can't -> drop on retry
   return [
-    "-nostdin", "-loglevel", "error", "-y", "-i", src,
-    ...maps, "-c:v", "copy", "-c:a", "copy", ...vtag, ...subs,
+    "-nostdin", "-loglevel", "error", "-y", ...inputs,
+    ...maps, "-c:v", "copy", "-c:a", "copy", ...vtag, ...subs, ...meta,
     "-movflags", "+faststart", "-progress", "pipe:1", "-nostats", partial,
   ];
 }
@@ -271,14 +303,20 @@ function startOptimize(token) {
   const partial = partialPathFor(src);
   const durSec = probeDurationSec(src);
   const vcodec = probeVideoCodec(src);
+  const embCount = probeSubCount(src);
+  // External sidecar / Subs-folder subtitles to embed, labelled by filename.
+  const extSubs = findSubs(src).map((s) => {
+    const label = path.basename(s.name, path.extname(s.name)); // "Subs/English.srt" -> "English"
+    return { path: s.path, label, lang: subLangOf(label) };
+  });
   const job = { state: "running", percent: 0, startedAt: Date.now(), error: null, proc: null };
   optimizeJobs.set(token, job);
   generatedFiles.add(partial); generatedFiles.add(out);
-  logInfo(`optimize: start '${token}' codec=${vcodec || "?"} -> ${path.basename(out)} (duration ${durSec}s)`);
+  logInfo(`optimize: start '${token}' codec=${vcodec || "?"} embSubs=${embCount} extSubs=${extSubs.length} -> ${path.basename(out)} (duration ${durSec}s)`);
 
   // attempt 1 copies subtitles; on failure we retry once without them.
   function run(withSubs) {
-    const args = remuxArgs(src, partial, vcodec, withSubs);
+    const args = remuxArgs(src, partial, vcodec, withSubs, extSubs, embCount);
     const proc = spawn(FFMPEG, args, { stdio: ["ignore", "pipe", "pipe"] });
     job.proc = proc;
     let buf = "", errout = "";
