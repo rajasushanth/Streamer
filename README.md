@@ -22,7 +22,9 @@ Node + Express backend, a single-page vanilla-JS control UI (no framework, no bu
 - **Pinned control panel** — once a stream starts, its controls stay visible while you keep
   browsing; it also survives a page reload.
 - **Subtitles** — sidecar subtitle files (`.srt/.ass/.vtt/.sub`) that share a video's name are
-  detected and served; embedded subtitles are preserved when a file is optimized (below).
+  detected and served, as is every subtitle inside a `Subs/` (or `Subtitles/`) subfolder next to
+  the video (e.g. YTS language packs), labelled by filename. Embedded subtitles are also preserved
+  when a file is optimized (below).
 - **QR codes** — every file shows a scannable QR for its URL.
 - **Lossless "optimize"** — one click losslessly remuxes a file to a seek-friendly MP4 so VLC can
   seek and resume reliably (see below). No re-encode, no quality loss.

@@ -153,19 +153,39 @@ loadAliases();
 function isVideo(name) { return VIDEO_EXT.has(path.extname(name).toLowerCase()); }
 function isSub(name) { return SUB_EXT.has(path.extname(name).toLowerCase()); }
 
+// Subfolders that hold subtitle collections (as in YTS releases: a "Subs"
+// folder of per-language files that don't share the video's name).
+const SUB_DIRS = new Set(["subs", "subtitles", "subtitle"]);
+
 function findSubs(videoPath) {
-  // Sidecar subtitles: any subtitle file in the same dir that shares the
-  // video's base name (e.g. Movie.mkv -> Movie.srt, Movie.en.srt).
   const dir = path.dirname(videoPath);
   const base = path.basename(videoPath, path.extname(videoPath)).toLowerCase();
   let entries = [];
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return []; }
   const out = [];
+  const seen = new Set();
+  const add = (name, full) => { if (!seen.has(full)) { seen.add(full); out.push({ name, path: full }); } };
+
   for (const e of entries) {
-    if (!e.isFile() || !isSub(e.name)) continue;
-    const subBase = path.basename(e.name, path.extname(e.name)).toLowerCase();
-    if (subBase === base || subBase.startsWith(base + ".") || subBase.startsWith(base + "_")) {
-      out.push({ name: e.name, path: path.join(dir, e.name) });
+    // Sidecar subtitles: a subtitle file in the same dir that shares the
+    // video's base name (e.g. Movie.mkv -> Movie.srt, Movie.en.srt).
+    if (e.isFile() && isSub(e.name)) {
+      const subBase = path.basename(e.name, path.extname(e.name)).toLowerCase();
+      if (subBase === base || subBase.startsWith(base + ".") || subBase.startsWith(base + "_")) {
+        add(e.name, path.join(dir, e.name));
+      }
+    }
+    // Dedicated subtitle subfolder: serve every subtitle in it, labelled by
+    // filename (languages), since those files don't match the video's name.
+    else if (e.isDirectory() && SUB_DIRS.has(e.name.toLowerCase())) {
+      const subDir = path.join(dir, e.name);
+      let subEntries = [];
+      try { subEntries = fs.readdirSync(subDir, { withFileTypes: true }); } catch { continue; }
+      for (const s of subEntries) {
+        if (s.isFile() && isSub(s.name)) {
+          add(`${e.name}/${s.name}`, path.join(subDir, s.name));
+        }
+      }
     }
   }
   return out;
