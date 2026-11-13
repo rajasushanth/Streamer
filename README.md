@@ -24,9 +24,9 @@ Node + Express backend, a single-page vanilla-JS control UI (no framework, no bu
 - **Subtitles** — sidecar subtitle files (`.srt/.ass/.vtt/.sub`) that share a video's name are
   detected, as is every subtitle inside a `Subs/` (or `Subtitles/`) subfolder next to the video
   (e.g. YTS language packs). Because a player streaming over HTTP won't pull a separate subtitle
-  URL, **Optimize** (below) embeds all of these — plus any already-embedded tracks — into the
-  streamed MP4 as selectable tracks, labelled by language, so they show up in VLC's subtitle menu
-  on the TV. (Each subtitle is also served at its own URL for players that can attach one.)
+  URL, **Optimize** (below) embeds an **English** track into the streamed MP4 so it shows up in
+  VLC's subtitle menu on the TV. (Each subtitle is also served at its own URL for players that can
+  attach one.)
 - **QR codes** — every file shows a scannable QR for its URL.
 - **Lossless "optimize"** — one click losslessly remuxes a file to a seek-friendly MP4 so VLC can
   seek and resume reliably (see below). No re-encode, no quality loss.
@@ -97,9 +97,10 @@ HTTP.
   and no quality loss**; only the container changes.
 - **Format-adaptive:** detects the video codec and tags it appropriately (e.g. HEVC → `hvc1`,
   AV1 → `av01`).
-- **Subtitles embedded:** any already-embedded tracks plus external sidecar / `Subs/`-folder
-  subtitles are muxed in as soft `mov_text` tracks tagged by language, so the TV player can switch
-  between them (text subs only; incompatible image-based tracks are dropped on a retry).
+- **English subtitle embedded:** an English sidecar / `Subs/`-folder subtitle (if present) is muxed
+  in as a soft `mov_text` track so it appears in the TV player's subtitle menu (text subs only).
+- **Cleaned container:** chapters and the auto-generated timecode track are dropped — some source
+  MP4s carry a broken QT chapter reference that produces a stray data track and crashes TV players.
 - The optimized file is served automatically in place of the original while streaming, and is
   cleaned up afterward so only your originals remain at rest.
 - Requires ffmpeg.

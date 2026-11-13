@@ -288,6 +288,10 @@ function remuxArgs(src, partial, vcodec, withSubs, extSubs, embCount) {
   return [
     "-nostdin", "-loglevel", "error", "-y", ...inputs,
     ...maps, "-c:v", "copy", "-c:a", "copy", ...vtag, ...subs, ...meta,
+    // Drop chapters and the auto timecode (tmcd) data track: some source MP4s
+    // (e.g. YTS) carry a broken QT chapter reference that produces a stray data
+    // track, which crashes TV players. Keep only video/audio/subtitle streams.
+    "-map_chapters", "-1", "-write_tmcd", "0",
     "-movflags", "+faststart", "-progress", "pipe:1", "-nostats", partial,
   ];
 }
@@ -304,11 +308,19 @@ function startOptimize(token) {
   const durSec = probeDurationSec(src);
   const vcodec = probeVideoCodec(src);
   const embCount = probeSubCount(src);
-  // External sidecar / Subs-folder subtitles to embed, labelled by filename.
-  const extSubs = findSubs(src).map((s) => {
+  // Embed a single English subtitle track (keeps the file small and maximally
+  // compatible with TV players, which can choke on many text tracks). Prefer a
+  // file literally named "english", then any eng-tagged file, then the sidecar.
+  const allSubs = findSubs(src).map((s) => {
     const label = path.basename(s.name, path.extname(s.name)); // "Subs/English.srt" -> "English"
     return { path: s.path, label, lang: subLangOf(label) };
   });
+  const englishMatch = allSubs.find((s) => /\benglish\b/i.test(s.label))
+    || allSubs.find((s) => s.lang === "eng");
+  const chosen = englishMatch
+    ? { ...englishMatch, label: "English", lang: "eng" }
+    : allSubs[0]; // no English found: embed the first available, as-is
+  const extSubs = chosen ? [chosen] : [];
   const job = { state: "running", percent: 0, startedAt: Date.now(), error: null, proc: null };
   optimizeJobs.set(token, job);
   generatedFiles.add(partial); generatedFiles.add(out);
